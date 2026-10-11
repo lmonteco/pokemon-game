@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# agent workspace
+.claude/

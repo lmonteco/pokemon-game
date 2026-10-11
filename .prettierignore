@@ -1,0 +1,8 @@
+dist/
+node_modules/
+coverage/
+package-lock.json
+
+# Design documents are authored by hand and owned by the design doc author.
+# Reformatting them produces a large, meaningless diff.
+docs/
