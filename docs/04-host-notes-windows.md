@@ -79,9 +79,8 @@ $tok = $r.env.GITHUB_TOKEN
 ```
 
 Take `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
-`GIT_COMMITTER_EMAIL` from the same `env` object before you commit. Without
-them the commit fails with `empty ident name`, because the inherited values are
-empty and an empty value beats `git -c user.name=...`.
+`GIT_COMMITTER_EMAIL` from the same `env` object before you commit — or set
+them yourself. Either way see section 4: without them every commit fails.
 
 A `credential.helper=store --file=<path>` helper does **not** work here. Git
 treats the helper string as a shell command, so the backslashes in a Windows
