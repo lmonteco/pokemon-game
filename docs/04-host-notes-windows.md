@@ -5,7 +5,7 @@ before you spend time on a tool that fails in a strange way. Each item below
 was found and confirmed on this machine.
 
 The host is Windows 11. The user profile is `C:\Users\Lucas Monteiro`. The
-space in the profile name is the cause of two of the three problems.
+space in the profile name is the cause of two of the four problems.
 
 ## 1. Use `engine: "cli"` for `claude_local` agents
 
@@ -89,6 +89,38 @@ path are eaten and the helper never answers. Do not spend time on it.
 
 Hide the token when you print command output: `$out.Replace($tok, '<token>')`.
 
+## 4. `git commit` fails with "empty ident name" — clear the env vars
+
+Every commit fails with:
+
+```
+fatal: empty ident name (for <>) not allowed
+```
+
+even when `git config user.name` and `user.email` are both set locally. The
+cause is that the harness exports the identity variables as **empty strings**:
+
+```
+GIT_AUTHOR_NAME=      GIT_COMMITTER_NAME=
+GIT_AUTHOR_EMAIL=     GIT_COMMITTER_EMAIL=
+```
+
+An empty env var still counts as set, and it overrides `git config`, so
+configuring the repo has no effect. `GIT_CONFIG_GLOBAL=/dev/null` and
+`GIT_CONFIG_NOSYSTEM=1` are also exported, so there is no global config to
+fall back on either — the repo-local config is the only one git will read.
+
+Set all four in the session before committing:
+
+```powershell
+$env:GIT_AUTHOR_NAME="Forge"; $env:GIT_AUTHOR_EMAIL="forge@deepwild.local"
+$env:GIT_COMMITTER_NAME="Forge"; $env:GIT_COMMITTER_EMAIL="forge@deepwild.local"
+```
+
+They do not persist between PowerShell tool calls, so set them in the **same**
+call as the `git commit`. Check with `git var GIT_AUTHOR_IDENT` — it fails the
+same way, which makes it a one-command test for this problem.
+
 ## Shell note
 
 The Bash tool on this host has no coreutils on its `PATH` — `env`, `grep`,
@@ -97,6 +129,6 @@ shell work.
 
 ## Status
 
-All three problems are reported upstream on GAM-13. Delete the matching
+All four problems are reported upstream on GAM-13. Delete the matching
 section here when a Paperclip release fixes it. Until then, treat this file as
 the shortest path around each one.

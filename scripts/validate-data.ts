@@ -9,9 +9,14 @@ import { validateContentOnDisk } from '../src/content/node-loader.ts';
  * Wired into both `npm run build` and `npm test`, so invalid content cannot
  * reach a build. Exits 1 and prints every problem with its file, its path and
  * the value that was rejected.
+ *
+ * Takes an optional root directory so the end-to-end test can point it at a
+ * throwaway copy of `data/` with one thing deliberately broken. Defaults to the
+ * repository root, which is what the npm scripts use.
  */
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = process.argv[2] === undefined ? defaultRoot : resolve(process.argv[2]);
 const result = validateContentOnDisk(repoRoot);
 
 if (!result.ok) {
