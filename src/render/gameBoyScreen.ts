@@ -18,6 +18,7 @@ import {
   shadeSource,
   type Palette,
 } from './palette';
+import { integerZoom } from './integerZoom';
 import { LUMA_B, LUMA_G, LUMA_R, paletteRampBands } from './quantize';
 
 /**
@@ -71,7 +72,11 @@ export function gameBoyGameConfig(
  */
 export function keepIntegerZoom(scale: Phaser.Scale.ScaleManager): () => void {
   const update = (): void => {
-    const zoom = scale.getMaxZoom();
+    // Our own `integerZoom` rather than Phaser's `getMaxZoom`, which computes
+    // the same thing: this is the one number that decides whether pixels come
+    // out square, and `integerZoom.test.ts` sweeps it over window sizes that
+    // no screenshot could cover.
+    const zoom = integerZoom(scale.parentSize.width, scale.parentSize.height);
 
     // Guarded because `setZoom` refreshes, which emits RESIZE again. One
     // extra pass settles it; without the guard it would not stop.
