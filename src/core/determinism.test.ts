@@ -320,15 +320,24 @@ describe('determinism', () => {
 
     const perStep = growth / 50_000;
     process.stdout.write(
-      `  [alloc spot-check] 50,000 steps: ${collections} collections, ` +
-        `heap growth ${growth} B (${perStep.toFixed(2)} B/step)\n`,
+      `  [alloc spot-check] 50,000 steps: ${collections} collections` +
+        ` (the signal); heap delta ${growth} B (${perStep.toFixed(2)} B/step, advisory)\n`,
     );
 
     expect(world.tick).toBe(52_000);
-    // Generous bounds on purpose: this is a smoke alarm for a step that starts
-    // allocating, not a benchmark. 50,000 allocating steps would be thousands
-    // of collections and megabytes of churn.
-    expect(collections).toBeLessThan(10);
-    expect(perStep).toBeLessThan(64);
+
+    // The verdict on this acceptance criterion rests on the collection count,
+    // not on the byte figure. Measured over five consecutive runs the count was
+    // 0 every time, while the heap delta swung from -46 B/step to +39 B/step.
+    // A step that really allocated 39 B could not produce a *negative* total,
+    // so that figure is GC timing against `heapUsed`, not per-step allocation.
+    // It is printed because the plan asks for the profile result, and bounded
+    // loosely below only to catch a step that starts leaking outright.
+    //
+    // The count is the sensitive instrument: an allocation-free step forces no
+    // scavenge at all, so anything above zero here means a step began
+    // allocating. 2 allows for an unrelated collection from the test harness.
+    expect(collections).toBeLessThanOrEqual(2);
+    expect(Math.abs(perStep)).toBeLessThan(64);
   });
 });

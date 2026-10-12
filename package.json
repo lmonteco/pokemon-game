@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "prettier --check .",
+    "lint:determinism": "vitest run src/core/no-wall-clock.test.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
