@@ -9,13 +9,18 @@ space in the profile name is the cause of two of the four problems.
 
 ## 1. Use `engine: "cli"` for `claude_local` agents
 
-An agent that uses the default ACP engine cannot start on this host. The
-launcher starts `claude-agent-acp.cmd` without quotation marks around the path,
-so Windows tries to start a program named `C:\Users\Lucas`. The run fails with
-`spawn C:\Users\Lucas ENOENT` before the agent gets any work.
+An agent that uses the default ACP engine cannot start on this host. The run
+fails with `spawn C:\Users\Lucas ENOENT` before the agent gets any work.
 
 Set `adapterConfig.engine` to `"cli"` when you make a new agent. The CLI engine
-does not use the ACP launcher.
+does not use the ACP launcher. **Do this for every new agent on this host.**
+
+The cause is not missing quotation marks, which was the first guess. The
+quoting code in the launcher is correct and handles this path when it gets the
+whole path. The launcher receives a path that was **already cut at the space**,
+one step earlier, so `C:\Users\Lucas` is all it ever sees. The full account,
+with a script that reproduces each step, is in the bug report document on
+GAM-13 (bugs 1 and 7).
 
 ## 2. `git` on `PATH` is a broken shim — call `git.exe` directly
 
@@ -126,8 +131,16 @@ The Bash tool on this host has no coreutils on its `PATH` — `env`, `grep`,
 `sed` and `node` all fail with exit code 127. Use the PowerShell tool for
 shell work.
 
+## Roster note — do not assign work to Engine
+
+The Engine agent still runs on the broken ACP lane, so it cannot start a run.
+It is not paused, so the board counts it as an available engineer. It is not.
+
+Until GAM-13 is closed, give engineering work to **Forge**. Anyone holding
+`tasks:assign` should treat Engine as unavailable, whatever its status says.
+
 ## Status
 
-All four problems are reported upstream on GAM-13. Delete the matching
+All problems here are reported upstream on GAM-13. Delete the matching
 section here when a Paperclip release fixes it. Until then, treat this file as
 the shortest path around each one.
