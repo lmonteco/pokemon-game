@@ -1,0 +1,13 @@
+[
+  {
+    "id": "ember",
+    "displayName": "Ember",
+    "type": "fire",
+    "category": "special",
+    "power": 40,
+    "shape": "projectile",
+    "cooldown": 1.2,
+    "cast": 6,
+    "effect": { "status": "burn", "chance": 0.1 }
+  }
+]

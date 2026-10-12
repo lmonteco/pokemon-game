@@ -1,0 +1,144 @@
+{
+  "$comment": "Known-correct type matchups, used to spot-check data/typechart.json. These live outside src/ on purpose: they are a specification of the content, and src/ must never name a type (GDD 11.3). Replace this file together with the chart if the game is ever reskinned.",
+  "cases": [
+    { "attack": "fire", "defenders": ["grass"], "expected": 2, "note": "plain super effective" },
+    { "attack": "fire", "defenders": ["water"], "expected": 0.5, "note": "plain resisted" },
+    { "attack": "fire", "defenders": ["normal"], "expected": 1, "note": "plain neutral" },
+    { "attack": "normal", "defenders": ["normal"], "expected": 1, "note": "neutral on itself" },
+    { "attack": "water", "defenders": ["fire"], "expected": 2, "note": "the oldest matchup" },
+    { "attack": "fighting", "defenders": ["normal"], "expected": 2, "note": "super effective" },
+    { "attack": "fairy", "defenders": ["dragon"], "expected": 2, "note": "the Gen 6 addition" },
+    { "attack": "fairy", "defenders": ["steel"], "expected": 0.5, "note": "steel resists fairy" },
+    { "attack": "steel", "defenders": ["fairy"], "expected": 2, "note": "and hits back hard" },
+    {
+      "attack": "steel",
+      "defenders": ["electric"],
+      "expected": 0.5,
+      "note": "easy cell to get wrong"
+    },
+    {
+      "attack": "ghost",
+      "defenders": ["ghost"],
+      "expected": 2,
+      "note": "super effective on itself"
+    },
+    { "attack": "poison", "defenders": ["fairy"], "expected": 2, "note": "Gen 6 poison buff" },
+
+    { "attack": "normal", "defenders": ["ghost"], "expected": 0, "note": "immunity" },
+    {
+      "attack": "ghost",
+      "defenders": ["normal"],
+      "expected": 0,
+      "note": "immunity, the other way"
+    },
+    { "attack": "fighting", "defenders": ["ghost"], "expected": 0, "note": "immunity" },
+    { "attack": "electric", "defenders": ["ground"], "expected": 0, "note": "immunity" },
+    { "attack": "ground", "defenders": ["flying"], "expected": 0, "note": "immunity" },
+    { "attack": "poison", "defenders": ["steel"], "expected": 0, "note": "immunity" },
+    { "attack": "psychic", "defenders": ["dark"], "expected": 0, "note": "immunity" },
+    { "attack": "dragon", "defenders": ["fairy"], "expected": 0, "note": "immunity, Gen 6" },
+
+    { "attack": "ice", "defenders": ["grass", "flying"], "expected": 4, "note": "dual weakness" },
+    { "attack": "ice", "defenders": ["dragon", "flying"], "expected": 4, "note": "dual weakness" },
+    { "attack": "rock", "defenders": ["fire", "flying"], "expected": 4, "note": "dual weakness" },
+    {
+      "attack": "electric",
+      "defenders": ["water", "flying"],
+      "expected": 4,
+      "note": "dual weakness"
+    },
+    { "attack": "ground", "defenders": ["fire", "rock"], "expected": 4, "note": "dual weakness" },
+    { "attack": "water", "defenders": ["ground", "rock"], "expected": 4, "note": "dual weakness" },
+    { "attack": "grass", "defenders": ["water", "ground"], "expected": 4, "note": "dual weakness" },
+    { "attack": "fire", "defenders": ["grass", "steel"], "expected": 4, "note": "dual weakness" },
+    { "attack": "dark", "defenders": ["psychic", "ghost"], "expected": 4, "note": "dual weakness" },
+    { "attack": "bug", "defenders": ["dark", "psychic"], "expected": 4, "note": "dual weakness" },
+    { "attack": "fighting", "defenders": ["rock", "dark"], "expected": 4, "note": "dual weakness" },
+    {
+      "attack": "flying",
+      "defenders": ["grass", "fighting"],
+      "expected": 4,
+      "note": "dual weakness"
+    },
+    {
+      "attack": "psychic",
+      "defenders": ["fighting", "poison"],
+      "expected": 4,
+      "note": "dual weakness"
+    },
+
+    {
+      "attack": "fire",
+      "defenders": ["fire", "water"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "grass",
+      "defenders": ["fire", "flying"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "bug",
+      "defenders": ["fire", "flying"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "electric",
+      "defenders": ["grass", "dragon"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "normal",
+      "defenders": ["rock", "steel"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "psychic",
+      "defenders": ["steel", "psychic"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "water",
+      "defenders": ["water", "dragon"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "water",
+      "defenders": ["grass", "dragon"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+    {
+      "attack": "ice",
+      "defenders": ["steel", "water"],
+      "expected": 0.25,
+      "note": "dual resistance"
+    },
+
+    {
+      "attack": "ice",
+      "defenders": ["water", "grass"],
+      "expected": 1,
+      "note": "2x and 0.5x cancel out"
+    },
+    {
+      "attack": "ground",
+      "defenders": ["flying", "fire"],
+      "expected": 0,
+      "note": "an immunity beats a weakness"
+    },
+    {
+      "attack": "dragon",
+      "defenders": ["dragon", "fairy"],
+      "expected": 0,
+      "note": "an immunity beats a weakness"
+    }
+  ]
+}

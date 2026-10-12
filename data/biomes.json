@@ -1,0 +1,11 @@
+[
+  {
+    "id": "verdant-hollow",
+    "displayName": "Verdant Hollow",
+    "floors": { "from": 1, "to": 5 },
+    "favouredTypes": ["grass", "bug", "poison"],
+    "spawnTable": [{ "speciesId": "charmander", "weight": 1 }],
+    "weather": "none",
+    "hazards": ["water", "spike-trap"]
+  }
+]

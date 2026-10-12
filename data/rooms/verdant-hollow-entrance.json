@@ -1,0 +1,17 @@
+{
+  "id": "verdant-hollow-entrance",
+  "displayName": "Hollow Entrance",
+  "biomeId": "verdant-hollow",
+  "kind": "entrance",
+  "width": 11,
+  "height": 7,
+  "tiles": [
+    "###########",
+    "#.........#",
+    "#..~~...e.#",
+    "+....p....+",
+    "#..~~...e.#",
+    "#.........#",
+    "###########"
+  ]
+}

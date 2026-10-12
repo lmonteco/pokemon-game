@@ -1,0 +1,14 @@
+[
+  {
+    "id": "fire-damage",
+    "displayName": "Fire Damage",
+    "effect": "type-damage",
+    "scopeTypeId": "fire",
+    "tiers": [
+      { "rarity": "common", "min": 3, "max": 6 },
+      { "rarity": "great", "min": 6, "max": 11 },
+      { "rarity": "ultra", "min": 11, "max": 18 }
+    ],
+    "slotWhitelist": ["held-item", "band", "trinket"]
+  }
+]

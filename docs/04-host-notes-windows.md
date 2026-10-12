@@ -59,9 +59,35 @@ POST $PAPERCLIP_GITHUB_BROKER_URL/runtime-tools/github/credentials
   body: {}
 ```
 
-A good answer has `status: "available"` and an `env` object. Put those
-variables in the environment of the push command, then push with the real
-`git.exe`.
+A good answer has `status: "available"` and an `env` object.
+
+Do not try to copy the whole `env` object into your shell. Some of its
+`GIT_CONFIG_VALUE_*` entries are empty strings, and PowerShell deletes an
+environment variable when you set it to an empty string. `GIT_CONFIG_COUNT`
+then counts more pairs than exist and every later `git` call dies with
+`missing config value GIT_CONFIG_VALUE_0`.
+
+This recipe works. Clear the inherited git settings, then push to a URL that
+carries the token:
+
+```powershell
+$env:GIT_CONFIG_GLOBAL = $null; $env:GIT_CONFIG_SYSTEM = $null
+$env:GIT_CONFIG_COUNT = $null; $env:GIT_CONFIG_NOSYSTEM = $null
+$env:GIT_SSH_COMMAND = $null; $env:GIT_ASKPASS = $null
+$tok = $r.env.GITHUB_TOKEN
+& $git push "https://x-access-token:$tok@github.com/lmonteco/pokemon-game.git" "HEAD:refs/heads/main"
+```
+
+Take `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
+`GIT_COMMITTER_EMAIL` from the same `env` object before you commit. Without
+them the commit fails with `empty ident name`, because the inherited values are
+empty and an empty value beats `git -c user.name=...`.
+
+A `credential.helper=store --file=<path>` helper does **not** work here. Git
+treats the helper string as a shell command, so the backslashes in a Windows
+path are eaten and the helper never answers. Do not spend time on it.
+
+Hide the token when you print command output: `$out.Replace($tok, '<token>')`.
 
 ## Shell note
 

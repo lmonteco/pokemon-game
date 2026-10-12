@@ -1,0 +1,18 @@
+[
+  {
+    "id": "charmander",
+    "displayName": "Charmander",
+    "types": ["fire"],
+    "baseStats": {
+      "hp": 39,
+      "attack": 52,
+      "defense": 43,
+      "spAttack": 60,
+      "spDefense": 50,
+      "speed": 65
+    },
+    "learnset": [{ "moveId": "ember", "level": 1 }],
+    "spriteKey": "charmander",
+    "aiArchetype": "chaser"
+  }
+]
