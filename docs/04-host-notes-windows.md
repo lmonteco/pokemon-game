@@ -175,6 +175,28 @@ repo **Settings → Pages → Source: GitHub Actions**. That is a user action, n
 an agent one, and it takes a few seconds. Ask for it rather than working
 around it.
 
+## Playing a build locally - `npm run dev`, and the 127.0.0.1 trap
+
+Checked 2026-10-13 on commit `f959777`. Until Pages is turned on (see the
+deploy note above), this is how anyone plays the build:
+
+```powershell
+cd "C:\Users\Lucas Monteiro\.paperclip\instances\default\projects\3b331e8a-c314-4507-aa24-f33af6899603\3f946a32-42ef-491f-8a5b-7712a9362241\pokemon-game"
+npm run dev
+```
+
+Then open **`http://localhost:5173`**. Verified working: the page answers 200
+and `/src/main.ts` compiles and is served.
+
+**Use `localhost`, not `127.0.0.1`.** Vite binds the IPv6 loopback here, so
+`http://localhost:5199/` and `http://[::1]:5199/` both answer 200 while
+`http://127.0.0.1:5199/` is refused outright. A health check written against
+`127.0.0.1` reports a dead server that is in fact running - it cost one wasted
+check to find. Add `--host 127.0.0.1` if you need the IPv4 address.
+
+No build step is needed to play; `npm run dev` serves the TypeScript directly.
+`npm run build` runs data validation and `tsc --noEmit` first, so it also
+fails on any uncommitted work in progress elsewhere in `src/`.
 ## Status
 
 The problems above are recorded in the bug report document on GAM-13. The
