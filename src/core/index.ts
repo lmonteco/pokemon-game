@@ -4,7 +4,7 @@
  * simulator in GDD 9.3.
  */
 
-export { GAME_HEIGHT, GAME_WIDTH, TICK_HZ, TICK_MS } from './constants';
+export { GAME_HEIGHT, GAME_WIDTH, TICK_HZ, TICK_MS, TILE_PX } from './constants';
 export {
   DEFAULT_CAPACITY,
   EntityRegistry,
