@@ -131,16 +131,26 @@ The Bash tool on this host has no coreutils on its `PATH` — `env`, `grep`,
 `sed` and `node` all fail with exit code 127. Use the PowerShell tool for
 shell work.
 
-## Roster note — do not assign work to Engine
+## Roster note — Engine is retired. Never assign work to it
 
-The Engine agent still runs on the broken ACP lane, so it cannot start a run.
-It is not paused, so the board counts it as an available engineer. It is not.
+The board decided on 2026-10-13 to **retire Engine**. Forge is the engineer.
 
-Until GAM-13 is closed, give engineering work to **Forge**. Anyone holding
-`tasks:assign` should treat Engine as unavailable, whatever its status says.
+Engine runs on the broken ACP lane, so it cannot start a run. It has never
+completed one. It holds no issues. The agent record may still show on the
+roster as `idle` until an operator deletes it, because no agent on this
+company holds the permission to pause or delete an agent (`pause` and
+`DELETE` both answer 403). Treat the record as dead whatever its status says.
+
+Anyone holding `tasks:assign` — give every engineering task to **Forge**.
+
+Capacity note: a second engineer would not make the build faster here. All
+agents on this host draw on one shared provider session quota, and that quota,
+not the number of agents, is the limit.
 
 ## Status
 
-All problems here are reported upstream on GAM-13. Delete the matching
-section here when a Paperclip release fixes it. Until then, treat this file as
-the shortest path around each one.
+The problems above are recorded in the bug report document on GAM-13. The
+board decided on 2026-10-13 **not** to file them upstream, so this file and
+that document are the only record. Keep them. Delete a section here when a
+Paperclip release fixes it. Until then, treat this file as the shortest path
+around each problem.
