@@ -52,6 +52,7 @@ type TestMove = {
   shape: string;
   cooldown: number;
   cast: number;
+  projectile?: { speed?: number; radius?: number; range?: number; pierce?: number };
   effect?: { status: string; chance: number };
 };
 
@@ -118,6 +119,7 @@ function makeBundle(): TestBundle {
         shape: 'projectile',
         cooldown: 1.2,
         cast: 6,
+        projectile: { speed: 180, radius: 3, range: 160, pierce: 0 },
         effect: { status: 'burn', chance: 0.1 },
       },
     ],

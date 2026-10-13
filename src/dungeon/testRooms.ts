@@ -62,6 +62,19 @@ export const PILLAR: readonly string[] = [
 ];
 
 /**
+ * A large open box, 24x16 tiles -- 384x256 world units.
+ *
+ * For tests about something other than walls. Big enough that a shot with a
+ * few hundred units of range never reaches the edge, so a projectile test can
+ * be about range or cooldowns without the room quietly ending it.
+ */
+export const BIG_EMPTY_ROOM: RoomTemplate = roomFromRows([
+  '########################',
+  ...Array.from({ length: 14 }, () => '#......................#'),
+  '########################',
+]);
+
+/**
  * A one-tile-wide gap in a wall. The player's box is 10 units wide against a
  * 16-unit tile (`entities/tuning.ts`), so this has to be passable -- a gap the
  * player can see through but not walk through reads as the game being broken.

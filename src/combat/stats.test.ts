@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { TILE_PX } from '@/core/constants';
 import { MAX_BASE_STAT, MIN_BASE_STAT } from '@/content/schema/limits.ts';
 import {
+  MAX_COOLDOWN_RATE,
   MAX_MOVE_SPEED_TILES_PER_SECOND,
+  MIN_COOLDOWN_RATE,
   MIN_MOVE_SPEED_TILES_PER_SECOND,
+  cooldownRate,
   moveSpeedPixelsPerSecond,
   moveSpeedTilesPerSecond,
 } from './stats';
@@ -22,6 +25,9 @@ import {
 
 /** GDD 4.4, typed out from the document: `3.2 * (1 + (Spe - 100) / 400)`. */
 const gddFormula = (speedStat: number): number => 3.2 * (1 + (speedStat - 100) / 400);
+
+/** GDD 4.4's other half, typed out the same way: `1 + (Spe - 100) / 500`. */
+const gddCooldownFormula = (speedStat: number): number => 1 + (speedStat - 100) / 500;
 
 /** Every base stat a species may legally carry. */
 const LEGAL_STATS = Array.from(
@@ -107,6 +113,72 @@ describe('moveSpeedTilesPerSecond', () => {
     // would stop stopping them. Better to fail where the bad value entered.
     expect(() => moveSpeedTilesPerSecond(Number.NaN)).toThrow(RangeError);
     expect(() => moveSpeedTilesPerSecond(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+/**
+ * The second job GDD 4.4 gives Speed, and the one that replaced PP. It is the
+ * rate every cooldown in the game drains at, so an error here is invisible in
+ * any one move and wrong in all of them at once.
+ */
+describe('cooldownRate', () => {
+  it('matches the GDD 4.4 formula across the legal stat range', () => {
+    const mismatches: string[] = [];
+
+    LEGAL_STATS.forEach((stat) => {
+      const expected = gddCooldownFormula(stat);
+
+      if (cooldownRate(stat) !== expected) {
+        mismatches.push(`${stat}: ${cooldownRate(stat)} != ${expected}`);
+      }
+    });
+
+    expect(mismatches).toEqual([]);
+  });
+
+  it('leaves a 100-Speed species on its move’s authored cooldown', () => {
+    // The pivot has to be exactly 1, or every cooldown in `data/moves.json`
+    // means something other than the seconds it says.
+    expect(cooldownRate(100)).toBe(1);
+  });
+
+  it('moves cooldowns less than it moves the legs', () => {
+    // The divisors differ on purpose (500 against 400). If they were equal,
+    // Speed would compound into a single dominant stat -- see `stats.ts`.
+    const speedGain = moveSpeedTilesPerSecond(200) / moveSpeedTilesPerSecond(100);
+    const cooldownGain = cooldownRate(200) / cooldownRate(100);
+
+    expect(cooldownGain).toBeLessThan(speedGain);
+  });
+
+  it('spans 0.80 to 1.31 over the legal stat range', () => {
+    // The band the move numbers are tuned against: the slowest species pays
+    // about a quarter more than the authored cooldown, the fastest saves a
+    // quarter. Wide enough to feel, narrow enough that Speed is not the move.
+    expect(cooldownRate(MIN_BASE_STAT)).toBeCloseTo(0.802, 10);
+    expect(cooldownRate(MAX_BASE_STAT)).toBeCloseTo(1.31, 10);
+  });
+
+  it('never reaches its own clamp for a legal base stat', () => {
+    const clamped = LEGAL_STATS.filter((stat) => cooldownRate(stat) !== gddCooldownFormula(stat));
+
+    expect(clamped).toEqual([]);
+  });
+
+  it('clamps away from zero, which would be a cooldown that never ends', () => {
+    // A rate of zero reads to the player as the game having broken rather than
+    // as a very strong debuff, so the floor is a guard rail on stacked
+    // modifiers (GDD 6.4), not tuning.
+    expect(cooldownRate(-100_000)).toBe(MIN_COOLDOWN_RATE);
+    expect(cooldownRate(100_000)).toBe(MAX_COOLDOWN_RATE);
+    expect(MIN_COOLDOWN_RATE).toBeGreaterThan(0);
+  });
+
+  it('rejects a stat that is not a finite number', () => {
+    // NaN here would make the drain NaN, so the cooldown would never compare
+    // as elapsed and the move would be dead for the rest of the run.
+    expect(() => cooldownRate(Number.NaN)).toThrow(RangeError);
+    expect(() => cooldownRate(Number.POSITIVE_INFINITY)).toThrow(RangeError);
   });
 });
 

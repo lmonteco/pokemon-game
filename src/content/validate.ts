@@ -7,7 +7,9 @@ import {
   roomTemplateSchema,
   speciesFileSchema,
   typeChartSchema,
+  IMPLEMENTED_MOVE_SHAPES,
   ROOM_GLYPHS,
+  SHAPE_PARAM_FIELDS,
   STAT_SCOPED_AFFIX_EFFECTS,
   STATUS_SCOPED_AFFIX_EFFECTS,
   TYPE_SCOPED_AFFIX_EFFECTS,
@@ -437,7 +439,63 @@ function checkMoves(moves: readonly Move[], typeIds: ReadonlySet<string>): Conte
         value: move.power,
       });
     }
+
+    issues.push(...checkMoveShapeParams(file, root, move, index));
   });
+
+  return issues;
+}
+
+/**
+ * A move must carry the parameter block its shape names, and no other.
+ *
+ * Both halves matter. A `projectile` with no `projectile` block has no speed
+ * and no range, so it would either have to be given silent engine defaults --
+ * content in code, which GDD 11.3 forbids -- or spawn a shot that does
+ * nothing. A block for the wrong shape is a half-finished edit: the author
+ * changed `shape` and left the old numbers behind, and the game would ignore
+ * them without a word.
+ *
+ * A shape with no entry in `SHAPE_PARAM_FIELDS` has no runtime yet. Saying so
+ * here is the whole point of build-time validation: the author finds out when
+ * they save the file rather than when the move visibly fails to fire.
+ */
+function checkMoveShapeParams(
+  file: string,
+  root: string,
+  move: Move,
+  index: number,
+): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const expectedField: string | undefined =
+    SHAPE_PARAM_FIELDS[move.shape as keyof typeof SHAPE_PARAM_FIELDS];
+
+  if (expectedField === undefined) {
+    issues.push({
+      file,
+      path: formatPath(root, [index, 'shape']),
+      message:
+        `no engine runtime for this shape yet; implemented shapes are ` +
+        `${IMPLEMENTED_MOVE_SHAPES.join(', ')}`,
+      value: move.shape,
+    });
+  } else if (move[expectedField as keyof Move] === undefined) {
+    issues.push({
+      file,
+      path: formatPath(root, [index, expectedField]),
+      message: `shape "${move.shape}" requires a "${expectedField}" parameter block`,
+    });
+  }
+
+  for (const field of Object.values(SHAPE_PARAM_FIELDS)) {
+    if (field !== expectedField && move[field as keyof Move] !== undefined) {
+      issues.push({
+        file,
+        path: formatPath(root, [index, field]),
+        message: `parameters for a different shape; this move's shape is "${move.shape}"`,
+      });
+    }
+  }
 
   return issues;
 }

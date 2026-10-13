@@ -30,6 +30,7 @@ import { TICK_HZ } from '@/core/constants';
 import { NO_ENTITY, type EntityId } from '@/core/entity-registry';
 import type { World } from '@/core/world';
 import { moveSpeedPixelsPerSecond } from '@/combat/stats';
+import { FLAG_HITTABLE } from '@/combat/flags';
 import { moveBox, isBoxBlocked, type BoxMoveResult } from '@/dungeon/tileCollision';
 import type { TileGrid } from '@/dungeon/tileGrid';
 import {
@@ -157,6 +158,10 @@ export class PlayerController {
     world.entities.posX[slot] = spec.startX;
     world.entities.posY[slot] = spec.startY;
     world.entities.radius[slot] = PLAYER_HALF_WIDTH;
+    // A creature, so moves can hit it (`combat/flags.ts`). The player's own
+    // shots exclude their owner, so this does not make them shoot themselves;
+    // what it does is make an enemy's shots able to land once there are any.
+    world.entities.flags[slot] = FLAG_HITTABLE;
     world.events.emit('spawned', { entity });
   }
 

@@ -22,6 +22,26 @@ export const MAX_COOLDOWN_SECONDS = 60;
 /** Cast is windup in frames at TICK_HZ (GDD 4.2). 120 frames = 2 seconds. */
 export const MAX_CAST_FRAMES = 120;
 
+/**
+ * Projectile kinematics, in world units and world units per second (GDD 4.2's
+ * projectile shape, GDD 9.4's budget).
+ *
+ * The ceilings are generous because they are not balance: they are the point
+ * past which a value is certainly a typo. A speed above 2000 covers a third of
+ * the longest room in a single 60Hz tick, and a range above 2048 exceeds the
+ * diagonal of the largest room a template may describe, so neither can be what
+ * the author meant.
+ */
+export const MAX_PROJECTILE_SPEED = 2000;
+export const MAX_PROJECTILE_RANGE = 2048;
+export const MAX_PROJECTILE_RADIUS = 32;
+
+/**
+ * How many extra targets one projectile may pass through. 0 means it stops at
+ * the first thing it hits, which is the series' default behaviour for a shot.
+ */
+export const MAX_PROJECTILE_PIERCE = 16;
+
 /** A species has one or two types, as in the series. */
 export const MAX_TYPES_PER_SPECIES = 2;
 

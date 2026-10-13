@@ -6,8 +6,14 @@
     "category": "special",
     "power": 40,
     "shape": "projectile",
-    "cooldown": 1.2,
+    "cooldown": 0.45,
     "cast": 6,
-    "effect": { "status": "burn", "chance": 0.1 }
+    "effect": { "status": "burn", "chance": 0.1 },
+    "projectile": {
+      "speed": 170,
+      "radius": 3,
+      "range": 150,
+      "pierce": 0
+    }
   }
 ]

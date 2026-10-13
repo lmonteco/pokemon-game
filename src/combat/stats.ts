@@ -7,9 +7,8 @@
  * `speed` field in the data and the game moves differently with no code edit.
  *
  * Speed is the interesting one, because GDD 4.4 makes it count twice: movement
- * speed and cooldown rate. Only the movement half is implemented here. The
- * cooldown half has no caller until moves exist (GAM-9 / M1-3) and belongs with
- * that task, so writing it now would be an untested constant waiting to drift.
+ * speed and cooldown rate. Both halves are here now -- the cooldown half
+ * arrived with the move system (GAM-9 / M1-3), which is its first caller.
  */
 
 import { TILE_PX } from '@/core/constants';
@@ -65,4 +64,44 @@ export function moveSpeedTilesPerSecond(speedStat: number): number {
  */
 export function moveSpeedPixelsPerSecond(speedStat: number): number {
   return moveSpeedTilesPerSecond(speedStat) * TILE_PX;
+}
+
+/**
+ * The GDD 4.4 cooldown formula:
+ *
+ *   cooldownRate = 1 + (Spe - 100) / 500
+ *
+ * A multiplier on how fast a cooldown drains, not on its length: a rate of 1.2
+ * empties a 1-second cooldown in 5/6 of a second. Expressed that way so that a
+ * Speed change mid-cooldown -- paralysis landing on you (GDD 4.5), a scarf
+ * coming off -- takes effect immediately on the cooldown already running,
+ * rather than only on the next one.
+ *
+ * Note the divisor is 500 against movement's 400, so Speed moves cooldowns
+ * less than it moves the legs. That is the right way round: a fast creature
+ * that both outran you and out-shot you by the same factor would compound into
+ * a single dominant stat.
+ */
+export const COOLDOWN_RATE_PIVOT_STAT = 100;
+export const COOLDOWN_RATE_STAT_DIVISOR = 500;
+
+/**
+ * Bounds on the rate. Inert over the series' legal 1..255 base Speed, which
+ * yields 0.80..1.31, for the same reason as the movement clamp above: what is
+ * passed in is an *effective* Speed that later milestones multiply, and a
+ * stacked debuff must not be able to reach a rate of zero. A rate of zero is a
+ * cooldown that never ends, which reads to the player as the game having
+ * broken rather than as a very strong debuff.
+ */
+export const MIN_COOLDOWN_RATE = 0.25;
+export const MAX_COOLDOWN_RATE = 4;
+
+export function cooldownRate(speedStat: number): number {
+  if (!Number.isFinite(speedStat)) {
+    throw new RangeError(`speed stat must be a finite number, got ${speedStat}`);
+  }
+
+  const raw = 1 + (speedStat - COOLDOWN_RATE_PIVOT_STAT) / COOLDOWN_RATE_STAT_DIVISOR;
+
+  return Math.min(MAX_COOLDOWN_RATE, Math.max(MIN_COOLDOWN_RATE, raw));
 }
