@@ -147,6 +147,34 @@ Capacity note: a second engineer would not make the build faster here. All
 agents on this host draw on one shared provider session quota, and that quota,
 not the number of agents, is the limit.
 
+## Deploy note — the Pages path is clear, checked 2026-10-12
+
+GAM-11 ends on a public URL, and the board asked for the deploy risk to be
+found early rather than on the last day of M1. It was checked ahead of the
+work. The result is good news: nothing here is blocked.
+
+What the checks found, against `lmonteco/pokemon-game`:
+
+- The repo is **public**, default branch `main`.
+- **Pages is not enabled yet** — `GET /repos/.../pages` answers 404 and
+  `has_pages` is `false`. It has to be turned on once before the first deploy.
+- **Actions is enabled**, `allowed_actions: all`. A Pages deploy workflow may
+  run.
+- The broker token is a **user token for `lmonteco`**, not an app installation
+  token — `GET /user` answers `lmonteco`, and repo-admin reads succeed. So
+  `POST /repos/.../pages` with `build_type: "workflow"` is expected to work
+  from a tool call at deploy time.
+
+So the deploy is a normal Actions-to-Pages job. Call the GitHub REST API with
+the broker token the same way section 3 gets push credentials — not through the
+`gh` CLI, which is not installed on this host, and not through the managed
+launcher, which is broken (section 2).
+
+If `POST /repos/.../pages` is ever refused, the fallback is one manual toggle:
+repo **Settings → Pages → Source: GitHub Actions**. That is a user action, not
+an agent one, and it takes a few seconds. Ask for it rather than working
+around it.
+
 ## Status
 
 The problems above are recorded in the bug report document on GAM-13. The
