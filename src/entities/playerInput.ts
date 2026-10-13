@@ -25,6 +25,17 @@ export const BUTTON_MOVE_RIGHT = 1 << 3;
  */
 export const BUTTON_DODGE = 1 << 4;
 
+/**
+ * Fire the selected move (GDD 4.1: mouse to aim, and the mouse fires it).
+ *
+ * A button bit rather than a pointer event read straight from the browser,
+ * because the simulation must not know what a mouse is: the balance harness in
+ * GDD 9.3 sets this bit with no device attached, and a recorded run replays it
+ * like any other button. Which physical button sets it is
+ * `render/deviceInput.ts`.
+ */
+export const BUTTON_FIRE = 1 << 5;
+
 /** A direction or a position. Mutated in place; never allocated per tick. */
 export interface Vec2 {
   x: number;

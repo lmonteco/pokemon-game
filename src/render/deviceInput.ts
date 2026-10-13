@@ -20,6 +20,7 @@ import Phaser from 'phaser';
 import type { FrameInput } from '@/core/world';
 import {
   BUTTON_DODGE,
+  BUTTON_FIRE,
   BUTTON_MOVE_DOWN,
   BUTTON_MOVE_LEFT,
   BUTTON_MOVE_RIGHT,
@@ -53,6 +54,35 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   { code: Phaser.Input.Keyboard.KeyCodes.SPACE, button: BUTTON_DODGE },
 ];
 
+/**
+ * Mouse-button masks, as the DOM reports them in `MouseEvent.buttons` and as
+ * Phaser forwards them on `Pointer.buttons`. Not the same numbering as
+ * `MouseEvent.button`, which is an index rather than a mask.
+ */
+export const POINTER_LEFT = 1;
+export const POINTER_RIGHT = 2;
+export const POINTER_MIDDLE = 4;
+
+/**
+ * The mouse-button map (GDD 7). The same shape as `KeyBinding`, and for the
+ * same reason: firing is a *binding* from a device button to a simulation bit,
+ * so it is remappable and so the simulation never learns that a mouse exists.
+ *
+ * A raw `POINTER_DOWN` listener would have been two lines shorter and wrong in
+ * two ways. It is an edge, so a held button fires once instead of repeating at
+ * the cooldown; and it arrives on a browser event rather than on a simulation
+ * step, so the same click would land on a different tick depending on how long
+ * the frame took -- which breaks replay (see the polling note above).
+ */
+export interface PointerBinding {
+  readonly mask: number;
+  readonly button: number;
+}
+
+export const DEFAULT_POINTER_BINDINGS: readonly PointerBinding[] = [
+  { mask: POINTER_LEFT, button: BUTTON_FIRE },
+];
+
 /** Where the cursor is, in world units. */
 export interface PointerWorldPosition {
   x: number;
@@ -67,6 +97,7 @@ export class DeviceInput {
   private readonly scene: Phaser.Scene;
   private readonly keys: { readonly key: Phaser.Input.Keyboard.Key; readonly button: number }[] =
     [];
+  private readonly pointerBindings: readonly PointerBinding[];
 
   /**
    * The last known cursor position in world units.
@@ -79,8 +110,13 @@ export class DeviceInput {
    */
   readonly pointer: PointerWorldPosition = { x: 0, y: 0 };
 
-  constructor(scene: Phaser.Scene, bindings = DEFAULT_KEY_BINDINGS) {
+  constructor(
+    scene: Phaser.Scene,
+    bindings = DEFAULT_KEY_BINDINGS,
+    pointerBindings = DEFAULT_POINTER_BINDINGS,
+  ) {
     this.scene = scene;
+    this.pointerBindings = pointerBindings;
 
     const keyboard = scene.input.keyboard;
 
@@ -122,6 +158,19 @@ export class DeviceInput {
       const binding = this.keys[i];
 
       if (binding !== undefined && binding.key.isDown) {
+        buttons |= binding.button;
+      }
+    }
+
+    // Polled from the active pointer's held-button mask, not from a down
+    // event, so that several simulation steps inside one browser frame all see
+    // the same button state.
+    const pointerButtons = this.scene.input.activePointer?.buttons ?? 0;
+
+    for (let i = 0; i < this.pointerBindings.length; i += 1) {
+      const binding = this.pointerBindings[i];
+
+      if (binding !== undefined && (pointerButtons & binding.mask) !== 0) {
         buttons |= binding.button;
       }
     }

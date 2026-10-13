@@ -17,7 +17,7 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '@/core/constants';
 import { World } from '@/core/world';
 import { content } from '@/content';
-import type { RoomTemplate, Species } from '@/content/schema/index.ts';
+import type { Move, RoomTemplate, Species } from '@/content/schema/index.ts';
 import { PlayerController } from '@/entities/player';
 import { playerStartPixel, tileGridFromRoom } from '@/dungeon/tileGrid';
 import {
@@ -26,7 +26,14 @@ import {
   CAMERA_DEADZONE_HALF_WIDTH,
   PLAYER_BOX_OFFSET_Y,
 } from '@/entities/tuning';
+import { BUTTON_FIRE } from '@/entities/playerInput';
+import { MOVE_SLOTS, MoveCaster, fireHeld } from '@/combat/moves';
+import { projectileOnlyShapes } from '@/combat/moveShapes';
+import { ProjectilePool } from '@/combat/projectiles';
+import { MAX_LIVE_PROJECTILES } from '@/combat/tuning';
+import { CooldownHud } from './cooldownHud';
 import { DeviceInput } from './deviceInput';
+import { ProjectileView } from './projectileView';
 import { FollowCamera } from './followCamera';
 import { GB_FONT_KEY, GLYPH_HEIGHT, createGbFont } from './gbFont';
 import { quantizeScene } from './gameBoyScreen';
@@ -46,6 +53,21 @@ export const PLAY_SCENE_KEY = 'Play';
 
 /** How far along the aim direction the facing pip is drawn, in world units. */
 const AIM_PIP_DISTANCE = 13;
+
+/**
+ * The level the player starts a run at. Placeholder for GDD 6.1's progression,
+ * which is a later milestone; what it is used for here is deciding which of a
+ * species' learnset entries are available, so that the equipped moves come out
+ * of `data/` by a rule rather than by being named.
+ */
+const STARTING_LEVEL = 1;
+
+/**
+ * How many shots a tick the performance harness fires. Eight a tick is 480 a
+ * second against a pool of 200 that drains in under one, which saturates the
+ * cap and holds it there -- the condition GDD 9.4's budget is stated for.
+ */
+const STRESS_SHOTS_PER_TICK = 8;
 
 /**
  * The room to play in: the largest template in `data/`.
@@ -90,11 +112,63 @@ export function chooseSpecies(species: readonly Species[]): Species {
   return chosen;
 }
 
+/**
+ * The moves the player has equipped: the species' own learnset, up to the four
+ * slots of GDD 4.2.
+ *
+ * A rule over the data, like `chooseRoom` and `chooseSpecies`, so that no move
+ * id appears in `src/` (GDD 11.3). Picking the move is GDD 6.3's mastery tree,
+ * which is a later milestone; until then "everything it knows at its starting
+ * level, in learnset order" is the rule.
+ */
+export function chooseMoves(species: Species, moves: readonly Move[]): Move[] {
+  const byId = new Map(moves.map((move) => [move.id, move]));
+  const equipped: Move[] = [];
+
+  for (const entry of species.learnset) {
+    if (entry.level > STARTING_LEVEL) {
+      continue;
+    }
+
+    const move = byId.get(entry.moveId);
+
+    if (move !== undefined && !equipped.includes(move)) {
+      equipped.push(move);
+    }
+    if (equipped.length === MOVE_SLOTS) {
+      break;
+    }
+  }
+
+  if (equipped.length === 0) {
+    throw new Error(
+      `"${species.id}" knows no move at level ${STARTING_LEVEL}; there is nothing to fire`,
+    );
+  }
+
+  return equipped;
+}
+
 export class PlayScene extends Phaser.Scene {
   private world: World | undefined;
   private player: PlayerController | undefined;
   private camera: FollowCamera | undefined;
   private device: DeviceInput | undefined;
+  private caster: MoveCaster | undefined;
+  private pool: ProjectilePool | undefined;
+  private projectiles: ProjectileView | undefined;
+  private hud: CooldownHud | undefined;
+
+  /**
+   * Scaffolding for the GDD 9.4 performance gate, toggled with F.
+   *
+   * One player firing one move keeps two shots in the air, and the budget is
+   * 200. There is no way to see whether 200 hold 60fps without a way to put
+   * 200 on the screen, and a harness that fires the real move out of the real
+   * data through the real pool is the only version of that which proves
+   * anything.
+   */
+  private stressing = false;
 
   private sprite: Phaser.GameObjects.Image | undefined;
   private reticle: Phaser.GameObjects.Image | undefined;
@@ -113,6 +187,8 @@ export class PlayScene extends Phaser.Scene {
     const grid = tileGridFromRoom(room);
     const start = playerStartPixel(room);
 
+    const equipped = chooseMoves(species, content.moves);
+
     createGbFont(this);
     createRoomTiles(this);
     createPlayerArt(this);
@@ -130,11 +206,40 @@ export class PlayScene extends Phaser.Scene {
       startY: start.y,
     });
 
+    const pool = new ProjectilePool(world, grid, MAX_LIVE_PROJECTILES);
+    const caster = new MoveCaster({
+      caster: player.entity,
+      // The moves come out of `data/`; the caster reads cooldown, cast and the
+      // shape block off them. Editing a number in the JSON is the whole of
+      // retuning this, which is the acceptance criterion.
+      moves: equipped,
+      shapes: projectileOnlyShapes(pool),
+      // GDD 4.4's second job for Speed: how fast a cooldown drains.
+      speedStat: species.baseStats.speed,
+      // The player's latched aim, by reference. Independent of movement, so
+      // you can back away from something while still shooting at it.
+      aim: player.aim,
+    });
+
+    // Order matters and is the reason these are three systems rather than one.
+    // Movement settles the position the shot leaves from; the caster releases;
+    // the pool then flies every shot, including the one just released, so a
+    // click and its first pixel of travel land on the same tick.
     world.addSystem('player', (w) => player.step(w));
+    world.addSystem('moves', (w) => caster.step(w, fireHeld(w, BUTTON_FIRE)));
+    world.addSystem('stress', (w) => this.stressStep(w, pool, player, equipped));
+    world.addSystem('projectiles', (w) => pool.step(w));
 
     this.drawRoom(room);
 
     this.sprite = this.add.image(start.x, start.y - PLAYER_BOX_OFFSET_Y, PLAYER_SPRITE_KEY);
+
+    // Added after the player and before the cursor, which is the whole of the
+    // depth sorting this scene needs: shots pass in front of the body and the
+    // reticle stays on top of everything.
+    const projectiles = new ProjectileView(this, MAX_LIVE_PROJECTILES);
+    projectiles.listenTo(pool);
+
     this.aimPip = this.add.image(start.x, start.y, AIM_PIP_KEY);
     this.reticle = this.add.image(start.x, start.y, RETICLE_KEY);
 
@@ -177,17 +282,78 @@ export class PlayScene extends Phaser.Scene {
       .setScrollFactor(0);
 
     this.input.keyboard?.on('keydown-P', () => cyclePalette());
+    this.input.keyboard?.on('keydown-F', () => {
+      this.stressing = !this.stressing;
+    });
 
     this.world = world;
     this.player = player;
     this.camera = camera;
     this.device = device;
+    this.caster = caster;
+    this.pool = pool;
+    this.projectiles = projectiles;
+    this.hud = new CooldownHud(this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.setDefaultCursor('default');
       this.device?.destroy();
       this.device = undefined;
     });
+  }
+
+  /**
+   * The performance harness: a fountain of the real move, fired straight into
+   * the pool with no cooldown, while F is toggled on.
+   *
+   * It goes through `pool.fire` with the move's own `projectile` block rather
+   * than inventing numbers, so what it measures is the shot the game actually
+   * fires -- same speed, same radius, same wall sweep, same broadphase. The
+   * only thing it skips is the cooldown, which is the only thing standing
+   * between one player and 200 live shots.
+   *
+   * Directions are spread by tick so the fountain sweeps the room instead of
+   * stacking every shot on one line, which would leave most of the spatial
+   * hash empty and flatter the measurement.
+   */
+  private stressStep(
+    world: World,
+    pool: ProjectilePool,
+    player: PlayerController,
+    equipped: readonly Move[],
+  ): void {
+    if (!this.stressing) {
+      return;
+    }
+
+    const move = equipped[0];
+    const params = move?.projectile;
+
+    if (move === undefined || params === undefined) {
+      return;
+    }
+
+    const originX = player.x(world);
+    const originY = player.y(world);
+
+    for (let i = 0; i < STRESS_SHOTS_PER_TICK; i += 1) {
+      const angle =
+        ((world.tick * STRESS_SHOTS_PER_TICK + i) / 97) * Math.PI * 2 +
+        (i / STRESS_SHOTS_PER_TICK) * Math.PI * 2;
+
+      pool.fire(world, {
+        owner: player.entity,
+        x: originX,
+        y: originY,
+        dirX: Math.cos(angle),
+        dirY: Math.sin(angle),
+        speed: params.speed,
+        radius: params.radius,
+        range: params.range,
+        pierce: params.pierce,
+        moveIndex: 0,
+      });
+    }
   }
 
   /** Lays the room out as a tilemap. Static, so it is built once. */
@@ -210,7 +376,11 @@ export class PlayScene extends Phaser.Scene {
     const camera = this.camera;
     const device = this.device;
 
-    if (!world || !player || !camera || !device) {
+    const caster = this.caster;
+    const pool = this.pool;
+    const projectiles = this.projectiles;
+
+    if (!world || !player || !camera || !device || !caster || !pool || !projectiles) {
       return;
     }
 
@@ -249,9 +419,16 @@ export class PlayScene extends Phaser.Scene {
 
     this.reticle?.setPosition(Math.round(device.pointer.x), Math.round(device.pointer.y));
 
+    projectiles.draw(world, pool);
+    this.hud?.draw(caster);
+
+    // The readout is scaffolding for the acceptance criteria: the frame time
+    // and the live shot count are exactly the two numbers GDD 9.4's budget is
+    // stated in, so the gate is read off the screen rather than guessed at.
     this.readout?.setText(
-      `${Math.round(this.game.loop.actualFps)}FPS ` +
-        `SPD ${Math.round(player.topSpeed)} ` +
+      `${Math.round(this.game.loop.actualFps)}F ` +
+        `${this.game.loop.delta.toFixed(1)}MS ` +
+        `P${pool.count} ` +
         `V ${Math.round(player.speed(world))}`,
     );
   }
