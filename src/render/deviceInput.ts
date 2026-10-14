@@ -81,6 +81,15 @@ export interface PointerBinding {
 
 export const DEFAULT_POINTER_BINDINGS: readonly PointerBinding[] = [
   { mask: POINTER_LEFT, button: BUTTON_FIRE },
+  // Right-click dodges as well as Space (GDD 4.4's dodge meter). Both, not
+  // one: Space is what the GDD's control list promises and what a keyboard
+  // player reaches for, and the right button is what a hand already on the
+  // mouse reaches for. They set the same bit, so the simulation cannot tell
+  // them apart and a replay does not record which was used.
+  //
+  // The scene must call `input.mouse.disableContextMenu()` for this to be
+  // usable in a browser; see `PlayScene`.
+  { mask: POINTER_RIGHT, button: BUTTON_DODGE },
 ];
 
 /** Where the cursor is, in world units. */

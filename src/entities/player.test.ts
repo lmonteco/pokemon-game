@@ -5,11 +5,20 @@ import { Rng } from '@/core/rng';
 import { World } from '@/core/world';
 import { validateContentOnDisk } from '@/content/node-loader.ts';
 import { moveSpeedPixelsPerSecond } from '@/combat/stats';
+import { FLAG_HITTABLE } from '@/combat/flags';
 import { isBoxBlocked } from '@/dungeon/tileCollision';
 import { tileGridFromRoom, type TileGrid } from '@/dungeon/tileGrid';
 import { OPEN_BOX, PILLAR, roomFromRows } from '@/dungeon/testRooms';
 import { PlayerController, WALK_CYCLE } from './player';
 import {
+  DODGE_CYCLE_TICKS,
+  DODGE_DASH_TICKS,
+  DODGE_IFRAMES,
+  DODGE_IFRAME_FIRST_TICK,
+  DODGE_IFRAME_LAST_TICK,
+} from './dodge';
+import {
+  BUTTON_DODGE,
   BUTTON_MOVE_DOWN,
   BUTTON_MOVE_LEFT,
   BUTTON_MOVE_RIGHT,
@@ -20,6 +29,7 @@ import {
   FACING_UP,
 } from './playerInput';
 import {
+  DODGE_PIP_MAX,
   PLAYER_HALF_HEIGHT,
   PLAYER_HALF_WIDTH,
   TICKS_TO_FULL_SPEED,
@@ -442,7 +452,12 @@ describe('PlayerController: walls', () => {
       // A new direction every few ticks, so the run includes reversals,
       // diagonals into corners and releases mid-stride.
       if (tick % 5 === 0) {
-        out.buttons = rng.nextInt(16);
+        // Through BUTTON_DODGE, so the run dashes into walls and into corners
+        // at 2.6x walking speed as well as walking into them. That is the
+        // "dashing into a wall does not clip through it" criterion from the
+        // dodge plan, and this is the cheapest honest way to cover it: every
+        // direction, every approach angle, mid-reversal, 20k ticks.
+        out.buttons = rng.nextInt(BUTTON_DODGE * 2);
       }
       out.aimX = rng.nextFloatBetween(-100, 100);
       out.aimY = rng.nextFloatBetween(-100, 100);
@@ -467,13 +482,195 @@ describe('PlayerController: walls', () => {
   });
 });
 
+/**
+ * The dodge, through the controller rather than through the machine.
+ *
+ * `dodge.test.ts` owns the state machine. What is only true here is the
+ * arbitration: the dash and the keys both write the same velocity, the
+ * invulnerability has to reach the registry flag the damage systems read, and
+ * the dash has to go through `moveBox` like everything else.
+ */
+describe('PlayerController: the dodge', () => {
+  /** Buttons for a dash to the right. */
+  const DASH_RIGHT = BUTTON_MOVE_RIGHT | BUTTON_DODGE;
+
+  /** Whether the player can be targeted this tick. */
+  function hittable(h: Harness): boolean {
+    const slot = h.world.entities.slotOf(h.player.entity);
+
+    return ((h.world.entities.flags[slot] ?? 0) & FLAG_HITTABLE) !== 0;
+  }
+
+  it('covers exactly the dash distance, and the keys do not add to it', () => {
+    const h = harness();
+    const start = h.position();
+
+    h.hold(DASH_RIGHT, DODGE_DASH_TICKS);
+
+    // Exactly, not approximately: the dash writes the velocity outright, so
+    // the distance is `dashSpeed / TICK_HZ` integrated DODGE_DASH_TICKS times.
+    // If the key's acceleration were being blended in on top, this would come
+    // out long -- and a dash whose length depends on which keys are held is
+    // one the i-frame window cannot be priced against.
+    expect(h.position().x - start.x).toBeCloseTo(h.player.dodge.dashDistance, 9);
+    expect(h.position().y).toBeCloseTo(start.y, 9);
+  });
+
+  it('reads as a burst: much further than walking the same ticks', () => {
+    const dash = harness();
+    const walk = harness();
+
+    dash.hold(DASH_RIGHT, DODGE_DASH_TICKS);
+    walk.hold(BUTTON_MOVE_RIGHT, DODGE_DASH_TICKS);
+
+    const dashed = dash.position().x - 3 * 16 - 8;
+    const walked = walk.position().x - 3 * 16 - 8;
+
+    // The acceptance criterion is "a clear distance, reads instantly". Against
+    // a walk that spends part of those ticks accelerating, the dash is several
+    // times further; anything under about double would not register as a
+    // separate action on screen.
+    expect(dashed).toBeGreaterThan(walked * 2);
+  });
+
+  it('publishes the i-frames on the registry flag, for the middle window only', () => {
+    const h = harness();
+    const exposed: number[] = [];
+    const safe: number[] = [];
+
+    for (let tick = 0; tick < DODGE_CYCLE_TICKS; tick += 1) {
+      h.hold(DASH_RIGHT, 1);
+      (hittable(h) ? exposed : safe).push(tick);
+    }
+
+    // Read off the flag the projectile broadphase rebuilds its target index
+    // from (`combat/projectiles.ts`), not off `isInvulnerable`: a dodge that
+    // worked on the accessor but never reached the flag would protect nothing.
+    expect(safe).toEqual(
+      Array.from(
+        { length: DODGE_IFRAME_LAST_TICK - DODGE_IFRAME_FIRST_TICK + 1 },
+        (_unused, i) => DODGE_IFRAME_FIRST_TICK + i,
+      ),
+    );
+
+    // And the ends of the dash are in the exposed list, which is the half of
+    // the criterion that says the window is a slice and not the whole dash.
+    expect(exposed).toContain(0);
+    expect(exposed).toContain(DODGE_DASH_TICKS - 1);
+  });
+
+  it('is hittable again once the dash is over', () => {
+    const h = harness();
+
+    h.hold(DASH_RIGHT, DODGE_CYCLE_TICKS * 2);
+
+    expect(h.player.dodge.phase).not.toBe(DODGE_IFRAMES);
+    expect(hittable(h)).toBe(true);
+  });
+
+  it('dashing into a wall neither clips through it nor sticks to it', () => {
+    // Started one tile in, so the dash is longer than the gap to the wall.
+    const h = harness(OPEN_BOX, TEST_SPEED_STAT, { x: 1, y: 2 });
+
+    h.hold(BUTTON_MOVE_LEFT | BUTTON_DODGE, DODGE_DASH_TICKS);
+
+    const stopped = h.position();
+
+    expect(h.player.hitWallX).toBe(true);
+    expect(isBoxBlocked(h.grid, stopped.x, stopped.y, PLAYER_HALF_WIDTH, PLAYER_HALF_HEIGHT)).toBe(
+      false,
+    );
+
+    // Not stuck: the dash ends, the keys come back, and the player walks off
+    // the wall. A dash that left the body pinned would show up here as a
+    // position that never changes again.
+    h.hold(0, DODGE_CYCLE_TICKS);
+    h.hold(BUTTON_MOVE_RIGHT, 20);
+
+    expect(h.position().x).toBeGreaterThan(stopped.x);
+  });
+
+  it('slides along a wall when dashed into it at an angle', () => {
+    const h = harness(OPEN_BOX, TEST_SPEED_STAT, { x: 1, y: 2 });
+    const start = h.position();
+
+    h.hold(BUTTON_MOVE_LEFT | BUTTON_MOVE_DOWN | BUTTON_DODGE, DODGE_DASH_TICKS);
+
+    expect(h.position().y).toBeGreaterThan(start.y);
+    expect(
+      isBoxBlocked(h.grid, h.position().x, h.position().y, PLAYER_HALF_WIDTH, PLAYER_HALF_HEIGHT),
+    ).toBe(false);
+  });
+
+  it('does not skid out of the dash at dash speed', () => {
+    const h = harness();
+
+    h.hold(DASH_RIGHT, DODGE_DASH_TICKS);
+    h.hold(0, 1);
+
+    // Clamped back to walking speed on the tick the dash ends, so releasing
+    // the keys stops the player on the normal schedule. Without the clamp the
+    // brake would have 2.6x top speed to bleed off and every dash would end in
+    // a slide the player did not ask for -- and dash-then-walk would beat
+    // walking, which makes bunny-hopping the fastest way across a room.
+    expect(h.player.speed(h.world)).toBeLessThanOrEqual(h.player.topSpeed);
+
+    h.hold(0, TICKS_TO_STOP);
+
+    expect(h.player.speed(h.world)).toBe(0);
+  });
+
+  it('keeps aiming independently while dashing', () => {
+    const h = harness();
+
+    // Dashing right, cursor to the left: the facing follows the cursor, the
+    // body follows the dash. The strafe from GDD 4.4 must not switch off
+    // because a dash is running.
+    h.hold(DASH_RIGHT, DODGE_DASH_TICKS, -40, 0);
+
+    expect(h.player.facing).toBe(FACING_LEFT);
+    expect(h.player.dodge.isDashing).toBe(true);
+  });
+
+  it('dashes toward the cursor from a standing start', () => {
+    // Low in the room, so a full dash upward has somewhere to go.
+    const h = harness(OPEN_BOX, TEST_SPEED_STAT, { x: 3, y: 4 });
+    const start = h.position();
+
+    h.hold(BUTTON_DODGE, DODGE_DASH_TICKS, 0, -40);
+
+    expect(h.position().y).toBeLessThan(start.y);
+    expect(h.position().x).toBeCloseTo(start.x, 9);
+  });
+
+  it('spends the whole meter and then refuses, through the real input path', () => {
+    const h = harness();
+
+    for (let i = 0; i < DODGE_PIP_MAX + 2; i += 1) {
+      // Tap: the dodge is an edge, so the button has to be released between
+      // dashes, and the cycle has to be waited out.
+      h.hold(DASH_RIGHT, 1);
+      h.hold(BUTTON_MOVE_RIGHT, DODGE_CYCLE_TICKS - 1);
+    }
+
+    // Three dashes from three pips. The two extra taps found an empty meter --
+    // and only the recharge can have given anything back, never the taps.
+    expect(h.player.dodge.dashCount).toBe(DODGE_PIP_MAX);
+  });
+});
+
 describe('PlayerController: determinism', () => {
   it('replays bit for bit from the same seed and the same inputs', () => {
     // The contract in `core/world.ts`. The player is the first system with
     // real state, so it is the first chance to break it -- a `Date.now()` or a
     // `Math.random()` in here would show up as a hash mismatch.
     const script = (tick: number, out: { buttons: number; aimX: number; aimY: number }): void => {
-      out.buttons = [BUTTON_MOVE_RIGHT, BUTTON_MOVE_DOWN, 0, BUTTON_MOVE_LEFT][tick % 4] ?? 0;
+      // The dodge is in the script because it is the one piece of player state
+      // with a timer in it, and a timer is where a wall clock gets read.
+      out.buttons =
+        [BUTTON_MOVE_RIGHT, BUTTON_MOVE_DOWN | BUTTON_DODGE, 0, BUTTON_MOVE_LEFT, BUTTON_DODGE][
+          tick % 5
+        ] ?? 0;
       out.aimX = Math.sin(tick) * 50;
       out.aimY = Math.cos(tick) * 50;
     };

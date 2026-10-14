@@ -22,6 +22,11 @@
  * can retreat while facing the thing chasing you. Movement comes from the keys
  * and aim comes from the mouse, and neither reads the other.
  *
+ * The dodge (GDD 4.4) is the one exception to "the keys decide the velocity":
+ * while a dash is running it writes the velocity itself and the keys are
+ * ignored. The machine lives in `dodge.ts`; what lives here is the arbitration
+ * between the two, because they both write the same two numbers.
+ *
  * Nothing here reads a clock or an unseeded random, so a world driven by a
  * scripted input source replays bit for bit (see `core/world.ts`).
  */
@@ -43,7 +48,9 @@ import {
   TICKS_TO_STOP,
   WALK_FRAME_DISTANCE,
 } from './tuning';
+import { DodgeMeter, dodgeHeld } from './dodge';
 import {
+  BUTTON_DODGE,
   FACING_DOWN,
   aimDirection,
   facingFromVector,
@@ -109,6 +116,14 @@ export class PlayerController {
    */
   private readonly arriveEpsilon: number;
 
+  /**
+   * The dodge: three pips, a dash, invulnerable frames (GDD 4.4). Owned by the
+   * controller rather than passed in, because the dash and ordinary movement
+   * write the same velocity and exactly one of them may win on any tick --
+   * that arbitration is this class's job and nobody else can do it.
+   */
+  readonly dodge: DodgeMeter;
+
   /** The facing the sprite is drawn in. Follows the aim, never the movement. */
   facing: Facing = FACING_DOWN;
 
@@ -126,13 +141,18 @@ export class PlayerController {
   private strideDistance = 0;
   private walkPhase = 0;
 
+  /** Whether the dash drove the body last tick. See `stepDodge`. */
+  private wasDashing = false;
+
   // Scratch, reused every tick so that stepping allocates nothing.
   private readonly wish: Vec2 = { x: 0, y: 0 };
+  private readonly dash: Vec2 = { x: 0, y: 0 };
   private readonly moved: BoxMoveResult = { x: 0, y: 0, hitX: false, hitY: false };
 
   constructor(world: World, grid: TileGrid, spec: PlayerSpec) {
     this.grid = grid;
     this.topSpeed = moveSpeedPixelsPerSecond(spec.speedStat);
+    this.dodge = new DodgeMeter({ speedStat: spec.speedStat });
 
     // Velocity is integrated per tick, so the ramps convert from "ticks to get
     // there" into "units per second of velocity, per tick".
@@ -209,9 +229,78 @@ export class PlayerController {
       return;
     }
 
-    this.steerVelocity(world, slot);
+    // Aim first, because a dash from a standing start takes its direction from
+    // it (`dodge.ts`) and must use this tick's cursor rather than last tick's.
     this.updateAim(world);
+
+    const wish = moveDirection(world.input.buttons, this.wish);
+
+    // The dash owns the velocity outright while it runs. Blending it with the
+    // keys would let a player hold the opposite direction to shorten their own
+    // dash, which turns the commitment the i-frame window is priced against
+    // into a thing you can opt out of half way through.
+    if (!this.stepDodge(world, slot, wish)) {
+      this.steerVelocity(world, slot, wish);
+    }
+
     this.integrate(world, slot);
+  }
+
+  /**
+   * Runs the dodge and, while it is dashing, writes its velocity.
+   *
+   * Returns whether the dash took the velocity this tick.
+   *
+   * Two details beyond handing the velocity over:
+   *
+   * - **Invulnerability is published as the registry's hittable flag**, not as
+   *   a boolean a damage system has to remember to ask about. The projectile
+   *   broadphase already rebuilds its target index from that flag every tick
+   *   (`combat/projectiles.ts`), so the i-frames work on every damage source
+   *   that exists and on every one written later, including ones written by
+   *   somebody who has never read this file. That is the whole reason to spend
+   *   a flag on it.
+   * - **The velocity is clamped back to walking speed on the tick the dash
+   *   ends.** Without the clamp the player leaves a dash at 2.6x top speed and
+   *   the brake takes several ticks to bleed it off, so every dash ends in a
+   *   skid the player did not ask for -- and dashing then walking would be
+   *   faster than walking, which makes bunny-hopping the optimal way to cross
+   *   a room.
+   */
+  private stepDodge(world: World, slot: number, wish: Vec2): boolean {
+    const entities = world.entities;
+
+    this.dodge.step({
+      wantsDodge: dodgeHeld(world, BUTTON_DODGE),
+      moveX: wish.x,
+      moveY: wish.y,
+      aimX: this.aim.x,
+      aimY: this.aim.y,
+    });
+
+    const flags = entities.flags[slot] ?? 0;
+    entities.flags[slot] = this.dodge.isInvulnerable
+      ? flags & ~FLAG_HITTABLE
+      : flags | FLAG_HITTABLE;
+
+    const dashing = this.dodge.dashVelocity(this.dash);
+
+    if (dashing) {
+      entities.velX[slot] = this.dash.x;
+      entities.velY[slot] = this.dash.y;
+    } else if (this.wasDashing) {
+      const vx = entities.velX[slot] ?? 0;
+      const vy = entities.velY[slot] ?? 0;
+      const speed = Math.sqrt(vx * vx + vy * vy);
+
+      if (speed > this.topSpeed) {
+        entities.velX[slot] = (vx / speed) * this.topSpeed;
+        entities.velY[slot] = (vy / speed) * this.topSpeed;
+      }
+    }
+
+    this.wasDashing = dashing;
+    return dashing;
   }
 
   /**
@@ -226,9 +315,8 @@ export class PlayerController {
    *     something is about to hit them;
    *   - anything else: accelerate.
    */
-  private steerVelocity(world: World, slot: number): void {
+  private steerVelocity(world: World, slot: number, wish: Vec2): void {
     const entities = world.entities;
-    const wish = moveDirection(world.input.buttons, this.wish);
 
     const targetX = wish.x * this.topSpeed;
     const targetY = wish.y * this.topSpeed;

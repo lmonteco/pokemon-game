@@ -94,3 +94,82 @@ export const WALK_FRAME_DISTANCE = 5;
  * direction flicker. Within the deadzone the last good aim is held.
  */
 export const AIM_DEADZONE = 3;
+
+/* -------------------------------------------------------------------------- */
+/* The dodge (GDD 4.4). See `entities/dodge.ts` for the machine these drive.  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Pips in the meter. Three, from GDD 4.4, and it is a design number rather
+ * than a feel number: three is enough for a chain of two with one held back,
+ * which is what makes holding the last one a decision instead of a habit.
+ */
+export const DODGE_PIP_MAX = 3;
+
+/**
+ * The three parts of a dash, in ticks at 60Hz. They sum to the dash.
+ *
+ * 4 + 5 + 5 is 14 ticks, 233ms. The invulnerable window is the middle five,
+ * ticks 4 to 8, so it opens 27% into the dash and closes 64% through it --
+ * the middle, as the plan asks for, with both ends exposed.
+ *
+ * Why these three and not one number: the sizes are what the whole mechanic
+ * is, so they have to be separately tunable.
+ *
+ * - **Start-up (4)** is the reaction-time tax. Too short and the dodge is a
+ *   free undo for a mistake already made; much longer and the player presses
+ *   dodge, is hit anyway, and reads it as the input being dropped. Four ticks
+ *   is 67ms, about one frame of human reaction.
+ * - **I-frames (5)** is the reward, and the number the feel pass will spend
+ *   the most time on. 83ms is roughly the width of a projectile passing
+ *   through you, so a correctly-timed dodge beats a shot and a hopeful one
+ *   does not.
+ * - **Recovery (5)** is the punish window. It is deliberately not shorter
+ *   than the i-frames: a dash whose exposure is smaller than its protection
+ *   is a strictly better option than standing still, and then there is no
+ *   defence to learn.
+ *
+ * The body is moving for all fourteen. Only the exposure changes.
+ */
+export const DODGE_STARTUP_TICKS = 4;
+export const DODGE_IFRAME_TICKS = 5;
+export const DODGE_RECOVERY_TICKS = 5;
+
+/**
+ * Ticks after a dash ends before another may begin, independent of pips.
+ *
+ * Without this, three pips would buy three dashes in three ticks -- one long
+ * teleport with a continuous invulnerable stripe through it, which is exactly
+ * the "mash and hope" the dodge exists to rule out. Eight ticks is 133ms, so
+ * the full meter spends itself over about 1.1 seconds and each dash is a
+ * separate readable movement rather than a blur.
+ */
+export const DODGE_LOCKOUT_TICKS = 8;
+
+/**
+ * How far a dash goes, expressed as **seconds of ordinary walking**.
+ *
+ * Stated this way so GDD 4.4's requirement that the distance come from the
+ * Speed stat is satisfied by the movement formula that already exists, with no
+ * second curve to balance. At 0.6, a dash covers 0.6s of walking in 0.233s --
+ * 2.6x walking speed -- which at a mid-tier Speed is about 1.9 tiles.
+ *
+ * Just under two tiles is the number that matters: it clears the width of a
+ * projectile and most of a melee arc, and it does not cross a room. A dodge
+ * that repositions you across the arena is a travel ability, and players use
+ * it to skip the fight rather than to survive it.
+ */
+export const DODGE_DISTANCE_SECONDS = 0.6;
+
+/**
+ * Seconds for **one** pip to come back, before the Speed stat scales it.
+ *
+ * GDD 4.4 says the meter "refills in 2s". Read as two seconds per pip, which
+ * puts a full refill from empty at six. The other reading -- the whole meter
+ * in two -- was tried on paper and fails the design: at 0.67s a pip you regain
+ * one faster than a dash plus its lockout takes, so the meter is never a
+ * constraint, nothing is ever a decision, and GDD 4.4's claim that stamina
+ * "carries the resource-management load" would be false. Flagged on GAM-8 for
+ * CEO; it is one number here either way.
+ */
+export const DODGE_PIP_RECHARGE_SECONDS = 2;

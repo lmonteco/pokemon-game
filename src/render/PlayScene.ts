@@ -27,12 +27,14 @@ import {
   PLAYER_BOX_OFFSET_Y,
 } from '@/entities/tuning';
 import { BUTTON_FIRE } from '@/entities/playerInput';
+import { DODGE_PHASE_NAMES } from '@/entities/dodge';
 import { MOVE_SLOTS, MoveCaster, fireHeld } from '@/combat/moves';
 import { projectileOnlyShapes } from '@/combat/moveShapes';
 import { ProjectilePool } from '@/combat/projectiles';
 import { MAX_LIVE_PROJECTILES } from '@/combat/tuning';
 import { CooldownHud } from './cooldownHud';
 import { DeviceInput } from './deviceInput';
+import { DodgeHud } from './dodgeHud';
 import { ProjectileView } from './projectileView';
 import { FollowCamera } from './followCamera';
 import { GB_FONT_KEY, GLYPH_HEIGHT, createGbFont } from './gbFont';
@@ -158,6 +160,7 @@ export class PlayScene extends Phaser.Scene {
   private pool: ProjectilePool | undefined;
   private projectiles: ProjectileView | undefined;
   private hud: CooldownHud | undefined;
+  private dodgeHud: DodgeHud | undefined;
 
   /**
    * Scaffolding for the GDD 9.4 performance gate, toggled with F.
@@ -273,6 +276,10 @@ export class PlayScene extends Phaser.Scene {
     // rather than two a few pixels apart.
     this.input.setDefaultCursor('none');
 
+    // Right-click dodges (`deviceInput.ts`), so the browser must not open its
+    // menu over the game when it does.
+    this.input.mouse?.disableContextMenu();
+
     // The readout is scaffolding for this task: the acceptance criteria
     // include 60fps and a speed that comes from `data/`, and both are easier
     // to confirm when the screen says what they are.
@@ -294,6 +301,7 @@ export class PlayScene extends Phaser.Scene {
     this.pool = pool;
     this.projectiles = projectiles;
     this.hud = new CooldownHud(this);
+    this.dodgeHud = new DodgeHud(this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.setDefaultCursor('default');
@@ -421,15 +429,24 @@ export class PlayScene extends Phaser.Scene {
 
     projectiles.draw(world, pool);
     this.hud?.draw(caster);
+    this.dodgeHud?.draw(player.dodge);
 
     // The readout is scaffolding for the acceptance criteria: the frame time
     // and the live shot count are exactly the two numbers GDD 9.4's budget is
     // stated in, so the gate is read off the screen rather than guessed at.
+    // The dodge phase is on the readout for the same reason the frame time is:
+    // "the i-frames are a window inside the dash" is the acceptance criterion,
+    // and the only way to check it by playing rather than by reading a test is
+    // for the screen to say which third of the dash you are in. The font has
+    // no lower case (`gbFont.ts`).
+    const phase = DODGE_PHASE_NAMES[player.dodge.phase] ?? '';
+
     this.readout?.setText(
       `${Math.round(this.game.loop.actualFps)}F ` +
         `${this.game.loop.delta.toFixed(1)}MS ` +
         `P${pool.count} ` +
-        `V ${Math.round(player.speed(world))}`,
+        `V ${Math.round(player.speed(world))} ` +
+        `D${player.dodge.pips} ${phase.toUpperCase()}`,
     );
   }
 }
